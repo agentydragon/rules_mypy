@@ -1,0 +1,13 @@
+common --enable_bzlmod
+
+common --lockfile_mode=off
+
+test --test_output=errors
+
+# Use local proxy that handles auth
+startup --host_jvm_args=-Dhttp.proxyHost=127.0.0.1 --host_jvm_args=-Dhttp.proxyPort=18080
+startup --host_jvm_args=-Dhttps.proxyHost=127.0.0.1 --host_jvm_args=-Dhttps.proxyPort=18080
+
+# Enable mypy aspect
+build --aspects //:py.bzl%mypy_aspect
+build --output_groups=+mypy

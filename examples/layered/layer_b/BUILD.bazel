@@ -1,0 +1,8 @@
+load("@rules_python//python:py_library.bzl", "py_library")
+
+py_library(
+    name = "layer_b",
+    srcs = ["__init__.py"],
+    visibility = ["//visibility:public"],
+    deps = ["//layer_a"],
+)
