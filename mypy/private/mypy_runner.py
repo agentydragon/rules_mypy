@@ -50,9 +50,16 @@ def _link_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
     This mirrors Bazel's approach where symlinks are preferred for efficiency,
     but copies are used as fallback on systems where symlinks aren't available
     (e.g., Windows without Developer Mode).
+
+    Uses relative symlinks calculated from path strings (not resolved paths)
+    to work correctly across Bazel sandbox boundaries. The sandbox creates
+    symlinks that would be resolved to sandbox-specific paths.
     """
     if _can_symlink():
-        dst.symlink_to(src.resolve())
+        # Use relative path calculated without resolving symlinks
+        # This avoids issues with Bazel sandbox paths
+        rel_path = src.relative_to(dst.parent, walk_up=True)
+        dst.symlink_to(rel_path)
     else:
         shutil.copy(src, dst)
 
