@@ -65,8 +65,8 @@ def _opt_in(opt_in_tags, rule_tags):
     return False
 
 def _mypy_impl(target, ctx):
-    # skip non-root targets
-    if target.label.workspace_root != "":
+    # skip non-root targets (unless include_external is True)
+    if not ctx.attr._include_external and target.label.workspace_root != "":
         return []
 
     if RulesPythonPyInfo not in target and PyInfo not in target:
@@ -236,7 +236,8 @@ def mypy(
         cache = True,
         color = True,
         suppression_tags = None,
-        opt_in_tags = None):
+        opt_in_tags = None,
+        include_external = False):
     """
     Create a mypy target inferring upstream caches from deps.
 
@@ -260,6 +261,10 @@ def mypy(
         opt_in_tags: (optional, default []) tags that must be present for mypy to run
                     on a particular target. When specified, this ruleset will _only_
                     run on targets with this tag.
+        include_external: (optional, default False) when True, run mypy on external
+                    dependencies (e.g. @pypi// packages). This allows external packages
+                    to have their own mypy cache, enabling downstream targets to
+                    symlink to it instead of redundantly caching.
 
     Returns:
         a mypy aspect.
@@ -292,6 +297,7 @@ def mypy(
             "_opt_in_tags": attr.string_list(default = opt_in_tags or []),
             "cache": attr.bool(default = cache),
             "color": attr.bool(default = color),
+            "_include_external": attr.bool(default = include_external),
         } | additional_attrs,
     )
 

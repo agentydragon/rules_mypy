@@ -2,7 +2,6 @@ import argparse
 import contextlib
 import pathlib
 import os
-import shutil
 import sys
 import tempfile
 from typing import Any, Generator, Optional
@@ -25,10 +24,10 @@ def _merge_upstream_caches(cache_dir: str, upstream_caches: list[str]) -> None:
             for file in filenames:
                 upstream_path = dirpath / file
                 target_path = current / relative_dir / file
-                if not target_path.parent.exists():
-                    target_path.parent.mkdir(parents=True)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
                 if not target_path.exists():
-                    shutil.copy(upstream_path, target_path)
+                    # Use symlink instead of copy to save disk space
+                    target_path.symlink_to(upstream_path.resolve())
 
     # missing_stubs is mutable, so remove it
     missing_stubs = current / "missing_stubs"
