@@ -2,12 +2,59 @@ import argparse
 import contextlib
 import pathlib
 import os
+import shutil
 import sys
 import tempfile
 from typing import Any, Generator, Optional
 
 import mypy.api
 import mypy.util
+
+
+# Cache for symlink availability check (None = not tested, True/False = result)
+_symlinks_supported: Optional[bool] = None
+
+
+def _can_symlink() -> bool:
+    """
+    Test if symlinks are supported on this system.
+
+    On Windows, symlinks require either:
+    - Developer Mode enabled (Windows 10 1703+)
+    - Running as Administrator
+
+    This mirrors Bazel's --windows_enable_symlinks behavior.
+    """
+    global _symlinks_supported
+    if _symlinks_supported is not None:
+        return _symlinks_supported
+
+    # Try to create a test symlink
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_target = pathlib.Path(tmpdir) / "target"
+            test_link = pathlib.Path(tmpdir) / "link"
+            test_target.write_text("test")
+            test_link.symlink_to(test_target)
+            _symlinks_supported = test_link.is_symlink()
+    except (OSError, NotImplementedError):
+        _symlinks_supported = False
+
+    return _symlinks_supported
+
+
+def _link_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
+    """
+    Create a symlink from dst to src, falling back to copy if symlinks aren't supported.
+
+    This mirrors Bazel's approach where symlinks are preferred for efficiency,
+    but copies are used as fallback on systems where symlinks aren't available
+    (e.g., Windows without Developer Mode).
+    """
+    if _can_symlink():
+        dst.symlink_to(src.resolve())
+    else:
+        shutil.copy(src, dst)
 
 
 def _merge_upstream_caches(cache_dir: str, upstream_caches: list[str]) -> None:
@@ -26,8 +73,8 @@ def _merge_upstream_caches(cache_dir: str, upstream_caches: list[str]) -> None:
                 target_path = current / relative_dir / file
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 if not target_path.exists():
-                    # Use symlink instead of copy to save disk space
-                    target_path.symlink_to(upstream_path.resolve())
+                    # Use symlink to save disk space, with copy fallback for Windows
+                    _link_or_copy(upstream_path, target_path)
 
     # missing_stubs is mutable, so remove it
     missing_stubs = current / "missing_stubs"
