@@ -12,7 +12,7 @@ jobs:
   test:
     strategy:
       matrix:
-        folder: [".", "examples/demo", "examples/opt-in"]
+        folder: [".", "examples/demo", "examples/opt-in", "examples/include-external"]
         version: ["7.1.0", "8.0.0"]
         os: ["ubuntu-latest"]
     runs-on: ${{ matrix.os }}

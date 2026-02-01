@@ -11,6 +11,59 @@ import mypy.api
 import mypy.util
 
 
+# Cache for symlink availability check (None = not tested, True/False = result)
+_symlinks_supported: Optional[bool] = None
+
+
+def _can_symlink() -> bool:
+    """
+    Test if symlinks are supported on this system.
+
+    On Windows, symlinks require either:
+    - Developer Mode enabled (Windows 10 1703+)
+    - Running as Administrator
+
+    This mirrors Bazel's --windows_enable_symlinks behavior.
+    """
+    global _symlinks_supported
+    if _symlinks_supported is not None:
+        return _symlinks_supported
+
+    # Try to create a test symlink
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_target = pathlib.Path(tmpdir) / "target"
+            test_link = pathlib.Path(tmpdir) / "link"
+            test_target.write_text("test")
+            test_link.symlink_to(test_target)
+            _symlinks_supported = test_link.is_symlink()
+    except (OSError, NotImplementedError):
+        _symlinks_supported = False
+
+    return _symlinks_supported
+
+
+def _link_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
+    """
+    Create a symlink from dst to src, falling back to copy if symlinks aren't supported.
+
+    This mirrors Bazel's approach where symlinks are preferred for efficiency,
+    but copies are used as fallback on systems where symlinks aren't available
+    (e.g., Windows without Developer Mode).
+
+    Uses relative symlinks calculated from path strings (not resolved paths)
+    to work correctly across Bazel sandbox boundaries. The sandbox creates
+    symlinks that would be resolved to sandbox-specific paths.
+    """
+    if _can_symlink():
+        # Use relative path calculated without resolving symlinks
+        # This avoids issues with Bazel sandbox paths
+        rel_path = src.relative_to(dst.parent, walk_up=True)
+        dst.symlink_to(rel_path)
+    else:
+        shutil.copy(src, dst)
+
+
 def _merge_upstream_caches(cache_dir: str, upstream_caches: list[str]) -> None:
     current = pathlib.Path(cache_dir)
     current.mkdir(parents=True, exist_ok=True)
@@ -25,10 +78,10 @@ def _merge_upstream_caches(cache_dir: str, upstream_caches: list[str]) -> None:
             for file in filenames:
                 upstream_path = dirpath / file
                 target_path = current / relative_dir / file
-                if not target_path.parent.exists():
-                    target_path.parent.mkdir(parents=True)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
                 if not target_path.exists():
-                    shutil.copy(upstream_path, target_path)
+                    # Use symlink to save disk space, with copy fallback for Windows
+                    _link_or_copy(upstream_path, target_path)
 
     # missing_stubs is mutable, so remove it
     missing_stubs = current / "missing_stubs"

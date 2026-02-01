@@ -1,0 +1,14 @@
+load("@rules_python//python:py_binary.bzl", "py_binary")
+
+py_binary(
+    name = "app",
+    srcs = ["__init__.py"],
+    main = "__init__.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//layer_a",
+        "//layer_b",
+        "//layer_c",
+        "//layer_d",
+    ],
+)
